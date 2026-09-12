@@ -1,0 +1,53 @@
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name : stock_postgres
+    environment :
+      POSTGRES_DB : stock_portfolio_db
+      POSTGRES_USER : postgres
+      POSTGRES_PASSWORD : password
+    ports :
+      - "5432:5432"
+    volumes :
+      - postgres_data:/var/lib/postgresql/data
+
+#  2. apache kafka (Kraft Mode - No Zookeeper needed)
+  kafka :
+    image :  apache/kafka:latest
+    container_name : stock_kafka
+    environment :
+      KAFKA_NODE_ID : 1
+      KAFKA_PROCESS_ROLES : broker,controller
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE : "true"
+      KAFKA_LISTENERS : PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS : 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR : 1
+    ports :
+      - "9092:9092"
+
+#  RabbitMq with Management web Dashboard
+  rabbitMq:
+    image: rabbitmq:3-management-alpine
+    container_name : stock_rabbitmq
+    environment :
+      RABBITMQ_DEFAULT_USER : guest
+      RABBITMQ_DEFAULT_PASS : guest
+    ports :
+      - "5672:5672"
+      - "15672:15672"
+
+#  MailPit = Local EMail testing sandbox
+
+  mailpit :
+    image : axllent/mailpit:latest
+    container_name : stock_mailpit
+    ports :
+      - "1025:1025"
+      - "8025:8025"
+
+volumes :
+  postgres_data :
