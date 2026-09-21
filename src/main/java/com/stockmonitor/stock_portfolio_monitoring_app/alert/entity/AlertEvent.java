@@ -29,7 +29,7 @@ public class AlertEvent {
 
 
     @Column(name = "percentageMove", nullable = false , precision = 14 , scale = 4)
-    private BigDecimal percentage_move;
+    private BigDecimal percentageMove;
 
 
     @Column(name = "triggered_at" , nullable = false)

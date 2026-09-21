@@ -59,8 +59,6 @@ public class AuthService {
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail());
 
         return AuthResponse.builder()
-                .token(token)
-                .tokenType("Bearer")
                 .userId(savedUser.getId())
                 .name(savedUser.getName())
                 .email(savedUser.getEmail())

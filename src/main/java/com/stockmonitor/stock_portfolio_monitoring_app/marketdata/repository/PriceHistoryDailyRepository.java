@@ -14,4 +14,5 @@ public interface PriceHistoryDailyRepository extends JpaRepository<PriceHistoryD
     List<PriceHistoryDaily> findByStockIdAndPriceDateBetweenOrderByPriceDateAsc(UUID stockId, LocalDate startDate, LocalDate endDate);
 
     boolean existsByStockIdAndPriceDate(UUID stockId, LocalDate priceDate);
+
 }

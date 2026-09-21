@@ -1,6 +1,8 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.alert.entity;
 
 
+import com.stockmonitor.stock_portfolio_monitoring_app.constants.AlertDirection;
+import com.stockmonitor.stock_portfolio_monitoring_app.constants.AlertScope;
 import com.stockmonitor.stock_portfolio_monitoring_app.portfolio.entity.Portfolio;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.entity.Stock;
 import com.stockmonitor.stock_portfolio_monitoring_app.user.entity.User;
@@ -29,8 +31,9 @@ public class AlertDefinition {
     @JoinColumn(name = "user_id" , nullable = false)
     private User user;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false , length = 10)
-    private String scope;
+    private AlertScope scope;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "stock_id")
@@ -40,8 +43,9 @@ public class AlertDefinition {
     @JoinColumn(name = "portfolio_id")
     private Portfolio portfolio;
 
-    @Column(length = 10 , nullable = false)
-    private String direction;
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10, nullable = false)
+    private AlertDirection direction;
 
     @Column(nullable = false , precision = 8 , scale = 4)
     private BigDecimal thresholdValue;

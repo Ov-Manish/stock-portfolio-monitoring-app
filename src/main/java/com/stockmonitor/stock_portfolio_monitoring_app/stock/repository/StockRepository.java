@@ -19,4 +19,10 @@ public interface StockRepository extends JpaRepository<Stock , UUID> {
     List<Stock> findByStatus(StockStatus status);
 
     boolean existsBySymbolAndExchange(String symbol , String exchange);
+
+    List<Stock> findAllBySymbol(String symbol);
+
+    Optional<Stock> findFirstBySymbol(String symbol);
+
+    Optional<Stock> findBySymbol(String symbol);
 }

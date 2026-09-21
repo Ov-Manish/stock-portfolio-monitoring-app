@@ -18,10 +18,10 @@ spring :
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         dialect: org.hibernate.dialect.PostgreSQLDialect
     open-in-view: false
 
@@ -37,7 +37,7 @@ spring :
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.stockmonitor.*"
+        spring.json.trusted.packages: "*"
 
 
   rabbitmq:
@@ -47,7 +47,7 @@ spring :
     password: guest
     listener:
       simple:
-        acknowledge-mode: manual
+        acknowledge-mode: auto
 
 
   mail:
