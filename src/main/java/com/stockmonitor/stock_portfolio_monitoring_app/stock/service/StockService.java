@@ -34,7 +34,7 @@ public class StockService {
         }
 
         String symbol = query.trim().toUpperCase();
-
+        log.info("Stock search query received: '{}'", symbol);
 
         // 1. Search existing stocks in DB
         List<Stock> existingStocks = stockRepository.findBySymbolContainingIgnoreCase(symbol);
@@ -55,7 +55,7 @@ public class StockService {
 
 
         MarketTickEvent tick = tickOpt.get();
-        // 3. Auto-register new stock into database
+
         Stock newStock = Stock.builder()
                 .symbol(symbol)
                 .exchange("NSE")
@@ -66,7 +66,7 @@ public class StockService {
 
         Stock savedStock = stockRepository.save(newStock);
         log.info("Auto-registered new stock into database: {} ({})", savedStock.getSymbol(), savedStock.getCompanyName());
-        // 4. Save initial market price
+
         Instant asOf = tick.getTimestamp() != null ? Instant.ofEpochMilli(tick.getTimestamp()) : Instant.now();
         marketPriceRepository.upsertMarketPrice(
                 savedStock.getId(),
@@ -102,7 +102,15 @@ public class StockService {
         return mapStocksToResponse(activeStocks);
     }
 
+    @Transactional
+    public Optional<MarketTickEvent> getStockOverview(String symbol){
+        if (symbol == null || symbol.trim().isEmpty()){
+            return  Optional.empty();
+        }
 
+
+        return yahooFinanceClient.fetchLatestMarketTick(symbol.trim().toUpperCase());
+    }
 
 
 //    Map Response Method

@@ -20,4 +20,7 @@ public class MarketTickEvent {
     private BigDecimal dayLow;
     private Long volume;
     private Long timestamp;
+    private BigDecimal fiftyTwoWeekHigh;
+    private BigDecimal fiftyTwoWeekLow;
+    private BigDecimal openPrice;
 }

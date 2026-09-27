@@ -19,6 +19,8 @@ public class BuyStockRequest {
     @NotNull(message = "User ID cannot be null")
     private UUID userId;
 
+    private UUID portfolioId;
+
     @NotNull(message = "Stock ID cannot be null")
     private UUID stockId;
 

@@ -1,6 +1,7 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.watchlist.service;
 
-
+import com.stockmonitor.stock_portfolio_monitoring_app.activity.entity.Activity;
+import com.stockmonitor.stock_portfolio_monitoring_app.activity.repository.ActivityRepository;
 import com.stockmonitor.stock_portfolio_monitoring_app.alert.entity.AlertDefinition;
 import com.stockmonitor.stock_portfolio_monitoring_app.alert.repository.AlertDefinitionRepository;
 import com.stockmonitor.stock_portfolio_monitoring_app.marketdata.entity.MarketPrice;
@@ -39,48 +40,59 @@ public class WatchlistService {
     private final UserRepository userRepository;
     private final MarketPriceRepository marketPriceRepository;
     private final AlertDefinitionRepository alertDefinitionRepository;
-
+    private final ActivityRepository activityRepository;
 
     @Transactional
-    public WatchlistResponse createWatchList(CreateWatchlistRequest request){
-        User user =  userRepository.findById(request.getUserId())
-                .orElseThrow( () -> new IllegalArgumentException("User not found with id: " + request.getUserId()) );
+    public WatchlistResponse createWatchList(CreateWatchlistRequest request) {
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + request.getUserId()));
 
         Watchlist watchlist = Watchlist.builder()
                 .user(user)
-                .name(request.getName())
+                .name(request.getName().trim())
                 .build();
 
         Watchlist saved = watchlistRepository.save(watchlist);
+
+        Activity activity = Activity.builder()
+                .user(user)
+                .type("WATCHLIST_CREATED")
+                .message(String.format("Created watchlist '%s'", saved.getName()))
+                .build();
+        activityRepository.save(activity);
+
+        log.info("Watchlist created: name='{}', id={}, user={}", saved.getName(), saved.getId(), user.getEmail());
 
         return mapToResponse(saved);
     }
 
     @Transactional(readOnly = true)
-    public List<WatchlistResponse> getUserWatchList(UUID userId){
+    public List<WatchlistResponse> getUserWatchList(UUID userId) {
         return watchlistRepository.findByUserId(userId).stream()
                 .map(this::mapToResponse)
                 .toList();
     }
 
     @Transactional(readOnly = true)
-    public WatchlistResponse getWatchListDetails(UUID watchlistId){
+    public WatchlistResponse getWatchListDetails(UUID watchlistId) {
         Watchlist watchlist = watchlistRepository.findById(watchlistId)
                 .orElseThrow(() -> new IllegalArgumentException("Watchlist not found with id: " + watchlistId));
 
-        return  mapToResponse(watchlist);
+        return mapToResponse(watchlist);
     }
 
     @Transactional
-    public WatchlistResponse addStockToWatchList(UUID watchlistId , AddWatchlistItemRequest request){
+    public WatchlistResponse addStockToWatchList(UUID watchlistId, AddWatchlistItemRequest request) {
         Watchlist watchlist = watchlistRepository.findById(watchlistId)
                 .orElseThrow(() -> new IllegalArgumentException("Watchlist not found with id: " + watchlistId));
         Stock stock = resolveStock(request);
+
         // Check if already in watchlist
         Optional<WatchlistItem> existing = watchlistItemRepository.findByWatchlistIdAndStockId(watchlistId, stock.getId());
         if (existing.isPresent()) {
             throw new IllegalArgumentException("Stock " + stock.getSymbol() + " is already in this watchlist");
         }
+
         WatchlistItem item = WatchlistItem.builder()
                 .watchlist(watchlist)
                 .stock(stock)
@@ -88,15 +100,30 @@ public class WatchlistService {
                 .build();
         watchlistItemRepository.save(item);
         watchlist.getItems().add(item);
+
+        Activity activity = Activity.builder()
+                .user(watchlist.getUser())
+                .type("WATCHLIST_STOCK_ADDED")
+                .message(String.format("Added %s to watchlist '%s'", stock.getSymbol(), watchlist.getName()))
+                .build();
+        activityRepository.save(activity);
+
+        log.info("Stock added to watchlist: symbol={}, watchlist='{}', user={}",
+                stock.getSymbol(), watchlist.getName(), watchlist.getUser().getEmail());
+
         return mapToResponse(watchlist);
     }
+
     @Transactional
     public void removeStockFromWatchlist(UUID watchlistId, UUID stockId) {
         watchlistItemRepository.deleteByWatchlistIdAndStockId(watchlistId, stockId);
+        log.info("Stock removed from watchlist: stockId={}, watchlistId={}", stockId, watchlistId);
     }
+
     @Transactional
     public void deleteWatchlist(UUID watchlistId) {
         watchlistRepository.deleteById(watchlistId);
+        log.info("Watchlist deleted: id={}", watchlistId);
     }
 
     private Stock resolveStock(AddWatchlistItemRequest request) {
@@ -114,61 +141,54 @@ public class WatchlistService {
             stockService.searchStocks(symbol);
             return stockRepository.findAllBySymbol(symbol).stream()
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Could not find or auto-discover stock: " + symbol));
+                    .orElseThrow(() -> new IllegalArgumentException("Could not find or discover stock with symbol: " + symbol));
         }
         throw new IllegalArgumentException("Either stockId or symbol must be provided");
     }
 
-//    MAP TO RESPONSE
-    private WatchlistResponse mapToResponse(Watchlist watchlist){
-        List<WatchlistItem> watchlistItems = watchlist.getItems();
+    private WatchlistResponse mapToResponse(Watchlist watchlist) {
+        List<WatchlistItem> items = watchlist.getItems();
         List<WatchlistItemResponse> itemResponses = new ArrayList<>();
 
-        if (watchlistItems != null && !watchlistItems.isEmpty()){
-            List<UUID> stockIds = watchlistItems.stream().map( i -> i.getStock().getId()).toList();
+        if (items != null && !items.isEmpty()) {
+            List<UUID> stockIds = items.stream().map(i -> i.getStock().getId()).toList();
 
-//           fetching live prices
             Map<UUID, MarketPrice> priceMap = marketPriceRepository.findAllById(stockIds).stream()
-                    .collect(Collectors.toMap(MarketPrice::getStockId , Function.identity()));
-
-            // 2. Batch fetch active user alerts for these stocks
+                    .collect(Collectors.toMap(MarketPrice::getStockId, Function.identity()));
 
             List<AlertDefinition> alerts = alertDefinitionRepository.findByUserId(watchlist.getUser().getId());
-            Map<UUID, AlertDefinition> stockAlertMap = alerts.stream()
-                    .filter(a -> a.isActive() && a.getStock() != null)
-                    .collect(Collectors.toMap(a -> a.getStock().getId(), Function.identity(), (a1, a2) -> a1));
+            Map<UUID, List<AlertDefinition>> alertsByStock = alerts.stream()
+                    .filter(AlertDefinition::isActive)
+                    .collect(Collectors.groupingBy(a -> a.getStock().getId()));
 
+            for (WatchlistItem item : items) {
+                Stock stock = item.getStock();
+                MarketPrice mp = priceMap.get(stock.getId());
+                List<AlertDefinition> activeAlerts = alertsByStock.getOrDefault(stock.getId(), Collections.emptyList());
 
-            for (WatchlistItem watchlistItem : watchlistItems){
-                Stock stock = watchlistItem.getStock();
-                MarketPrice marketPrice = priceMap.get(stock.getId());
-                AlertDefinition alert = stockAlertMap.get(stock.getId());
-
-                itemResponses.add(WatchlistItemResponse.builder()
-                        .itemId(watchlistItem.getId())
+                WatchlistItemResponse itemResponse = WatchlistItemResponse.builder()
+                        .itemId(item.getId())
                         .stockId(stock.getId())
                         .symbol(stock.getSymbol())
-                        .companyName(stock.getCompanyName())
                         .exchange(stock.getExchange())
-                        .currentPrice(marketPrice != null ? marketPrice.getPrice() : null)
-                        .asOf(marketPrice != null ? marketPrice.getAsOf() : null)
-                        .notes(watchlistItem.getNotes())
-                        .addedAt(watchlistItem.getAddedAt())
-                        .hasActiveAlert(alert != null)
-                        .alertTargetPrice(alert != null ? alert.getThresholdValue() : null)
-                        .build());
-            }
+                        .companyName(stock.getCompanyName())
+                        .currentPrice(mp != null ? mp.getPrice() : null)
+                        .asOf(mp != null ? mp.getAsOf() : null)
+                        .notes(item.getNotes())
+                        .addedAt(item.getAddedAt())
+                        .build();
 
+                itemResponses.add(itemResponse);
+            }
         }
 
-            return WatchlistResponse.builder()
-                    .id(watchlist.getId())
-                    .userId(watchlist.getUser().getId())
-                    .name(watchlist.getName())
-                    .totalItems(itemResponses.size())
-                    .createdAt(watchlist.getCreatedAt())
-                    .updatedAt(watchlist.getUpdatedAt())
-                    .items(itemResponses)
-                    .build();
+        return WatchlistResponse.builder()
+                .id(watchlist.getId())
+                .name(watchlist.getName())
+                .userId(watchlist.getUser().getId())
+                .totalItems(itemResponses.size())
+                .items(itemResponses)
+                .createdAt(watchlist.getCreatedAt())
+                .build();
     }
 }

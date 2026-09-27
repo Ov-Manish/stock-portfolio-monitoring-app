@@ -1,5 +1,6 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.stock.controller;
 
+import com.stockmonitor.stock_portfolio_monitoring_app.marketdata.dto.MarketTickEvent;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.dto.StockSearchResponse;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.entity.Stock;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.repository.StockRepository;
@@ -45,6 +46,13 @@ public class StockController {
             @RequestParam(defaultValue = "1mo") String range) {
         StockHistoryResponse response = priceHistoryService.getStockHistory(symbol, range);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/{symbol}/overview")
+    public ResponseEntity<MarketTickEvent> getStockOverview(@PathVariable String symbol){
+        return stockService.getStockOverview(symbol)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
 }

@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import com.stockmonitor.stock_portfolio_monitoring_app.marketdata.dto.DailyPriceResponse;
+import java.time.Duration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -27,8 +29,17 @@ public class YahooFinanceClient {
     private static final String YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.NS?interval=1d";
     private static final String YAHOO_HISTORY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.NS?range={range}&interval=1d";
     YahooFinanceClient(){
+//        this.restClient = RestClient.builder()
+//                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+//                .build();
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(4));
+        requestFactory.setReadTimeout(Duration.ofSeconds(6));
         this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
                 .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .defaultHeader(HttpHeaders.ACCEPT,"application/json")
                 .build();
     }
 
@@ -83,6 +94,26 @@ public class YahooFinanceClient {
                     : 0L;
 
 
+
+//            52 Weeks High
+            BigDecimal fiftyTwoWeeksHigh = meta.has("fiftyTwoWeekHigh") && !meta.path("fiftyTwoWeekHigh").isNull()
+                    ? BigDecimal.valueOf(meta.path("fiftyTwoWeekHigh").asDouble()) :null;
+
+//            52 Weeks low
+            BigDecimal fiftyTwoWeekLow = meta.has("fiftyTwoWeekLow") && !meta.path("fiftyTwoWeekLow").isNull()
+                    ? BigDecimal.valueOf(meta.path("fiftyTwoWeekLow").asDouble()) : null;
+
+
+//            Open Price
+
+            BigDecimal openPrice = null;
+
+            JsonNode quoteNode =
+                    root.path("chart").path("result").path(0).path("indicators").path("quote").path(0);
+            if (quoteNode.has("open") && quoteNode.path("open").isArray() && !quoteNode.path("open").isEmpty() && !quoteNode.path("open").get(0).isNull()) {
+                openPrice = BigDecimal.valueOf(quoteNode.path("open").get(0).asDouble());
+            }
+
 //            Makeing the tickEvent
             MarketTickEvent tickEvent = MarketTickEvent.builder()
                     .companyName(companyName)
@@ -93,6 +124,9 @@ public class YahooFinanceClient {
                     .dayHigh(dayHigh)
                     .dayLow(dayLow)
                     .volume(volume)
+                    .fiftyTwoWeekHigh(fiftyTwoWeeksHigh)
+                    .fiftyTwoWeekLow(fiftyTwoWeekLow)
+                    .openPrice(openPrice)
                     .timestamp(Instant.now().toEpochMilli())
                     .build();
 

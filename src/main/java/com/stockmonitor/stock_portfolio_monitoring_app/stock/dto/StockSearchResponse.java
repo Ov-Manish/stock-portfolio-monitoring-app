@@ -25,6 +25,9 @@ public class StockSearchResponse {
     private BigDecimal dayChangePercent;
     private BigDecimal dayHigh;
     private BigDecimal dayLow;
+    private BigDecimal fiftyTwoWeekHigh;
+    private BigDecimal fiftyTwoWeekLow;
+    private BigDecimal openPrice;
     private Long volume;
     private Instant asOf;
 }

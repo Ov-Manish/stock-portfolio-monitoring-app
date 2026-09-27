@@ -19,17 +19,34 @@ public class JwtService {
     @Value("${spring.jwt.secret:defaultSecretKeyForStockPortfolioMonitoringAppMustBe32BytesLong!}")
     private String secretKey;
 
-    @Value("${spring.jwt.expiration-ms:86400000}")
-    private long expirationMs;
+    @Value("${spring.jwt.access-token-expiration-ms:900000}")
+    private long accessTokenExpirationMs; // 15 minutes by default
+
+    @Value("${spring.jwt.refresh-token-expiration-ms:604800000}")
+    private long refreshTokenExpirationMs; // 7 days by default
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
     }
 
+    public String generateAccessToken(UUID userId, String email) {
+        return buildToken(userId, email, accessTokenExpirationMs, "ACCESS");
+    }
+
+    public String generateRefreshToken(UUID userId, String email) {
+        return buildToken(userId, email, refreshTokenExpirationMs, "REFRESH");
+    }
+
+    // Kept for backward compatibility
     public String generateToken(UUID userId, String email) {
+        return generateAccessToken(userId, email);
+    }
+
+    private String buildToken(UUID userId, String email, long expirationMs, String tokenType) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId.toString());
         claims.put("email", email);
+        claims.put("type", tokenType);
 
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationMs);
@@ -41,6 +58,14 @@ public class JwtService {
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    public long getAccessTokenExpirationMs() {
+        return accessTokenExpirationMs;
+    }
+
+    public long getRefreshTokenExpirationMs() {
+        return refreshTokenExpirationMs;
     }
 
     public Claims extractAllClaims(String token) {

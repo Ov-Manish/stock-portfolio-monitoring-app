@@ -69,4 +69,6 @@ spring :
 
   jwt:
     secret: ${JWT_SECRET}
-    expiration-ms: 86400000 # 24 Hours in milliseconds
+    expiration-ms: 86400000 # 24 Hours in milliseconds (legacy fallback)
+    access-token-expiration-ms: 900000 # 15 minutes
+    refresh-token-expiration-ms: 604800000 # 7 days

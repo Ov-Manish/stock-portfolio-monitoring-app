@@ -15,6 +15,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class PortfolioSummaryResponse {
     private UUID portfolioId;
+    private String portfolioName;
     private UUID userId;
     private BigDecimal totalInvested;
     private BigDecimal totalCurrentValue;

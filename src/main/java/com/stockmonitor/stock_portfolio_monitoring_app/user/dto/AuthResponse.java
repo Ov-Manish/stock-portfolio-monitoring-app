@@ -16,6 +16,9 @@ import java.util.UUID;
 public class AuthResponse {
     private String token;
     private String tokenType;
+    private String accessToken;  // 15-minute short-lived token
+    private String refreshToken;
+    private Long expiresIn;
     private UUID userId;
     private String name;
     private String email;
