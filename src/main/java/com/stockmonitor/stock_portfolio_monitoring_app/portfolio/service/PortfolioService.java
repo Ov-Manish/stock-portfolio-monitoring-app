@@ -106,16 +106,17 @@ public class PortfolioService {
 
         Holding holding;
 
+        BigDecimal buyPrice = resolveBuyPrice(request , stock);
+
         if (existingHoldingOpt.isPresent()) {
             holding = existingHoldingOpt.get();
             BigDecimal existingQty = holding.getQuantity();
             BigDecimal existingAvgPrice = holding.getAvgBuyPrice();
 
             BigDecimal newQty = request.getQuantity();
-            BigDecimal newBuyPrice = request.getBuyPrice();
 
             BigDecimal totalQty = existingQty.add(newQty);
-            BigDecimal totalCost = (existingQty.multiply(existingAvgPrice)).add(newQty.multiply(newBuyPrice));
+            BigDecimal totalCost = (existingQty.multiply(existingAvgPrice)).add(newQty.multiply(buyPrice));
             BigDecimal weightedAvgPrice = totalCost.divide(totalQty, 4, RoundingMode.HALF_UP);
 
             holding.setQuantity(totalQty);
@@ -125,7 +126,7 @@ public class PortfolioService {
                     .portfolio(portfolio)
                     .stock(stock)
                     .quantity(request.getQuantity())
-                    .avgBuyPrice(request.getBuyPrice())
+                    .avgBuyPrice(buyPrice)
                     .build();
         }
 
@@ -135,12 +136,12 @@ public class PortfolioService {
                 .user(user)
                 .type("STOCK_BOUGHT")
                 .message(String.format("Bought %s shares of %s at ₹%s in portfolio '%s'",
-                        request.getQuantity(), stock.getSymbol(), request.getBuyPrice(), portfolio.getName()))
+                        request.getQuantity(), stock.getSymbol(),buyPrice , portfolio.getName()))
                 .build();
         activityRepository.save(activity);
 
         log.info("Stock bought: user={}, symbol={}, qty={}, price=₹{}, portfolio='{}'",
-                user.getEmail(), stock.getSymbol(), request.getQuantity(), request.getBuyPrice(), portfolio.getName());
+                user.getEmail(), stock.getSymbol(), request.getQuantity(), buyPrice, portfolio.getName());
 
 
         PortfolioTransaction buyStock = PortfolioTransaction.builder()
@@ -149,8 +150,8 @@ public class PortfolioService {
                 .stock(stock)
                 .transactionType("BUY")
                 .quantity(request.getQuantity())
-                .price(request.getBuyPrice())
-                .totalAmount(request.getQuantity().multiply(request.getBuyPrice()))
+                .price(buyPrice)
+                .totalAmount(request.getQuantity().multiply(buyPrice))
                 .realizedPnL(null)
                 .build();
 
@@ -440,5 +441,45 @@ public class PortfolioService {
         log.info("Portfolio deleted successfully: id={}, name='{}', user={}",
                 portfolioId, portfolio.getName(), portfolio.getUser().getEmail());
 
+    }
+
+    private BigDecimal resolveBuyPrice(BuyStockRequest request, Stock stock) {
+
+        BigDecimal livePrice = null;
+
+        // 2. Fetch live price from Yahoo Finance
+        try {
+            Optional<MarketTickEvent> tickOpt = yahooFinanceClient.fetchLatestMarketTick(stock.getSymbol());
+            if (tickOpt.isPresent() && tickOpt.get().getPrice() != null && tickOpt.get().getPrice().compareTo(BigDecimal.ZERO) > 0) {
+                log.info("Resolved live market buy price for {}: ₹{}", stock.getSymbol(), tickOpt.get().getPrice());
+                 livePrice = tickOpt.get().getPrice();
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch live tick for {} on buy: {}", stock.getSymbol(), e.getMessage());
+        }
+
+        if (livePrice == null){
+            livePrice = marketPriceRepository.findById(stock.getId())
+                    .map(MarketPrice::getPrice)
+                    .orElseThrow(()-> new IllegalStateException("Market Price not Available for : "+stock.getSymbol()));
+        }
+
+
+        // 2. If user intentionally passed a price, validate it!
+        if (request.getBuyPrice() !=null){
+            BigDecimal diff = request.getBuyPrice().subtract(livePrice).abs();
+            BigDecimal allowedTolerance = livePrice.multiply(BigDecimal.valueOf(0.05));
+
+            if (diff.compareTo(allowedTolerance) > 0 ){
+                throw new IllegalArgumentException(String.format(
+                        "Invalid buy price ₹%s! Real market price is ₹%s ",
+                        request.getBuyPrice(), livePrice
+                ));
+            }
+
+          return request.getBuyPrice();
+        }
+
+        return livePrice;
     }
 }

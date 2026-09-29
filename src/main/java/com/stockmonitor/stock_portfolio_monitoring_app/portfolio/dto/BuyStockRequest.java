@@ -28,7 +28,6 @@ public class BuyStockRequest {
     @DecimalMin(value = "0.0001", message = "Quantity must be greater than 0")
     private BigDecimal quantity;
 
-    @NotNull(message = "Buy price cannot be null")
     @DecimalMin(value = "0.0001", message = "Buy price must be greater than 0")
     private BigDecimal buyPrice;
 }
