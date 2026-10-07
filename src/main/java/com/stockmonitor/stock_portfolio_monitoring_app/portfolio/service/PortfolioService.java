@@ -1,6 +1,7 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.portfolio.service;
 
 
+import com.stockmonitor.stock_portfolio_monitoring_app.exception.ResourceNotFoundException;
 import com.stockmonitor.stock_portfolio_monitoring_app.marketdata.client.YahooFinanceClient;
 import com.stockmonitor.stock_portfolio_monitoring_app.marketdata.dto.MarketTickEvent;
 import com.stockmonitor.stock_portfolio_monitoring_app.portfolio.entity.PortfolioTransaction;
@@ -48,10 +49,15 @@ public class PortfolioService {
     private final YahooFinanceClient yahooFinanceClient;
 
     @Transactional
-    public PortfolioResponse createPortfolio(CreatePortfolioRequest request) {
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + request.getUserId()));
+    public PortfolioResponse createPortfolio(CreatePortfolioRequest request, String currentUserEmail) {
+        User authenticatedUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + currentUserEmail));
 
+        if (request.getUserId() != null && !request.getUserId().equals(authenticatedUser.getId())) {
+            throw new SecurityException("Unauthorized: You cannot create a portfolio for another user!");
+        }
+
+        User user = authenticatedUser;
         Portfolio portfolio = Portfolio.builder()
                 .user(user)
                 .name(request.getName().trim())
@@ -77,8 +83,31 @@ public class PortfolioService {
                 .build();
     }
 
+    @Transactional
+    public PortfolioResponse createPortfolio(CreatePortfolioRequest request) {
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + request.getUserId()));
+        return createPortfolio(request, user.getEmail());
+    }
+
     @Transactional(readOnly = true)
     public List<PortfolioResponse> getUserPortfolios(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        return getUserPortfolios(userId, user.getEmail());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PortfolioResponse> getUserPortfolios(UUID userId , String currentUserEmail) {
+
+        User authenticatedUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + currentUserEmail));
+        // Block viewing other people's portfolios!
+        if (!authenticatedUser.getId().equals(userId)) {
+            throw new SecurityException("Unauthorized: You do not have permission to view this user's portfolios!");
+        }
+
+
         List<Portfolio> portfolios = portfolioRepository.findByUserId(userId);
 
         return portfolios.stream()
@@ -93,11 +122,17 @@ public class PortfolioService {
     }
 
     @Transactional
-    public HoldingResponse buyStock(BuyStockRequest request) {
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + request.getUserId()));
+    public HoldingResponse buyStock(BuyStockRequest request , String currentEmail) {
 
-        Portfolio portfolio = resolvePortfolio(request.getUserId(), request.getPortfolioId(), user);
+        User user = userRepository.findByEmail(currentEmail)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + currentEmail));
+
+        if (request.getUserId() != null && !request.getUserId().equals(user.getId())) {
+            throw new SecurityException("Unauthorized: You cannot buy stocks for another user's account!");
+        }
+
+        User authenticatedUseruser = user;
+        Portfolio portfolio = resolvePortfolio(authenticatedUseruser.getId(), request.getPortfolioId(), authenticatedUseruser);
 
         Stock stock = stockRepository.findById(request.getStockId())
                 .orElseThrow(() -> new IllegalArgumentException("Stock not found with id: " + request.getStockId()));
@@ -159,13 +194,27 @@ public class PortfolioService {
         return mapToHoldingResponse(savedHolding);
     }
 
+// Method Overloading for the excel File Upload
     @Transactional
-    public SellStockResponse sellStock(SellStockRequest request) {
+    public HoldingResponse buyStock(BuyStockRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + request.getUserId()));
 
-        Portfolio portfolio = resolvePortfolio(request.getUserId(), request.getPortfolioId(), user);
+        // Simply forwards to Version 2:
+        return buyStock(request, user.getEmail());
+    }
 
+    @Transactional
+    public SellStockResponse sellStock(SellStockRequest request , String currentUserEmail) {
+        User user = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + currentUserEmail));
+        // 2. Strict BOLA / Ownership Check:
+        if (request.getUserId() != null && !request.getUserId().equals(user.getId())) {
+            throw new SecurityException("Unauthorized: You cannot sell stocks from another user's account!");
+        }
+
+        User authenticatedUser = user;
+        Portfolio portfolio = resolvePortfolio(user.getId(), request.getPortfolioId(), user);
         Stock stock = stockRepository.findById(request.getStockId())
                 .orElseThrow(() -> new IllegalArgumentException("Stock not found with id: " + request.getStockId()));
 
@@ -254,9 +303,32 @@ public class PortfolioService {
     }
 
     @Transactional(readOnly = true)
-    public PortfolioSummaryResponse getPortfolioSummary(UUID userId) {
+    public PortfolioSummaryResponse getPortfolioSummary(UUID userId, String currentUserEmail) {
+        validateUserOwnership(userId, currentUserEmail);
         Portfolio portfolio = portfolioRepository.findFirstByUserIdOrderByCreatedAtAsc(userId)
                 .orElseThrow(() -> new IllegalArgumentException("No portfolio found for user: " + userId));
+
+        return buildPortfolioSummary(portfolio);
+    }
+
+    @Transactional(readOnly = true)
+    public PortfolioSummaryResponse getPortfolioSummary(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        return getPortfolioSummary(userId, user.getEmail());
+    }
+
+    @Transactional(readOnly = true)
+    public PortfolioSummaryResponse getPortfolioById(UUID portfolioId, String currentUserEmail) {
+        Portfolio portfolio = portfolioRepository.findById(portfolioId)
+                .orElseThrow(() -> new IllegalArgumentException("Portfolio not found with id: " + portfolioId));
+
+        User authenticatedUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + currentUserEmail));
+
+        if (!portfolio.getUser().getId().equals(authenticatedUser.getId())) {
+            throw new SecurityException("Unauthorized: You do not have permission to view this portfolio!");
+        }
 
         return buildPortfolioSummary(portfolio);
     }
@@ -380,9 +452,34 @@ public class PortfolioService {
                 .orElse(holding.getAvgBuyPrice());
     }
 
+    public void validateUserOwnership(UUID targetUserId, String currentUserEmail) {
+        User authenticatedUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + currentUserEmail));
+
+        if (!authenticatedUser.getId().equals(targetUserId)) {
+            throw new SecurityException("Unauthorized: You do not have permission to access another user's resources!");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<PortfolioTransactionResponse> getPortfolioTransactions(UUID portfolioId, String currentUserEmail) {
+        getPortfolioById(portfolioId, currentUserEmail);
+        return portfolioTransactionRepository.findByPortfolioIdOrderByCreatedAtDesc(portfolioId).stream()
+                .map(this::mapToTransactionResponse)
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<PortfolioTransactionResponse> getPortfolioTransactions(UUID portfolioId) {
         return portfolioTransactionRepository.findByPortfolioIdOrderByCreatedAtDesc(portfolioId).stream()
+                .map(this::mapToTransactionResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PortfolioTransactionResponse> getUserTransactions(UUID userId, String currentUserEmail) {
+        validateUserOwnership(userId, currentUserEmail);
+        return portfolioTransactionRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(this::mapToTransactionResponse)
                 .toList();
     }
@@ -411,36 +508,41 @@ public class PortfolioService {
                 .build();
     }
 
-
-
     @Transactional
-    public void deletePorfolio(UUID portfolioId , UUID userId){
-      Portfolio portfolio = portfolioRepository.findById(portfolioId)
-              .orElseThrow(()-> new IllegalArgumentException("Portfolio not Found with Id : " +portfolioId));
+    public void deletePorfolio(UUID portfolioId, UUID userId, String currentUserEmail){
+        validateUserOwnership(userId, currentUserEmail);
+        Portfolio portfolio = portfolioRepository.findById(portfolioId)
+                .orElseThrow(()-> new IllegalArgumentException("Portfolio not Found with Id : " +portfolioId));
 
-      if (portfolio != null && !portfolio.getUser().getId().equals(userId)){
-          throw new SecurityException("Unauthorized: You do not own this portfolio");
-      }
+        if (portfolio != null && !portfolio.getUser().getId().equals(userId)){
+            throw new SecurityException("Unauthorized: You do not own this portfolio");
+        }
 
-      List<Holding> activeHoldings = holdingRepository.findByPortfolioId(portfolioId);
+        List<Holding> activeHoldings = holdingRepository.findByPortfolioId(portfolioId);
 
-      if (!activeHoldings.isEmpty()){
-          throw new IllegalStateException(String.format(
-                  "Cannot delete portfolio '%s' because it still contains %d active stock holdings. Sell all shares before deleting!",
-                  portfolio.getName(), activeHoldings.size()));
-      }
+        if (!activeHoldings.isEmpty()){
+            throw new IllegalStateException(String.format(
+                    "Cannot delete portfolio '%s' because it still contains %d active stock holdings. Sell all shares before deleting!",
+                    portfolio.getName(), activeHoldings.size()));
+        }
 
-      List<Portfolio> allUserPortfolios = portfolioRepository.findByUserId(portfolio.getUser().getId());
+        List<Portfolio> allUserPortfolios = portfolioRepository.findByUserId(portfolio.getUser().getId());
 
-      if (allUserPortfolios.size() <= 1){
-          throw new IllegalStateException("Cannot delete your primary portfolio. You must maintain at least one portfolio.");
-      }
+        if (allUserPortfolios.size() <= 1){
+            throw new IllegalStateException("Cannot delete your primary portfolio. You must maintain at least one portfolio.");
+        }
 
-      portfolioRepository.delete(portfolio);
+        portfolioRepository.delete(portfolio);
 
         log.info("Portfolio deleted successfully: id={}, name='{}', user={}",
                 portfolioId, portfolio.getName(), portfolio.getUser().getEmail());
+    }
 
+    @Transactional
+    public void deletePorfolio(UUID portfolioId , UUID userId){
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        deletePorfolio(portfolioId, userId, user.getEmail());
     }
 
     private BigDecimal resolveBuyPrice(BuyStockRequest request, Stock stock) {

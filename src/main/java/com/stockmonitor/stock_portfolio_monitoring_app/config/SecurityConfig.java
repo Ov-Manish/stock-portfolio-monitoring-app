@@ -35,6 +35,7 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/stocks/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/stocks/**").authenticated()
                         .requestMatchers("/api/v1/portfolio/**").authenticated()
+                        .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthFilter, org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);

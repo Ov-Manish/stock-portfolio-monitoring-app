@@ -67,8 +67,36 @@ spring :
       max-request-size: 10MB
 
 
+
   jwt:
     secret: ${JWT_SECRET}
     expiration-ms: 86400000 # 24 Hours in milliseconds (legacy fallback)
     access-token-expiration-ms: 900000 # 15 minutes
     refresh-token-expiration-ms: 604800000 # 7 days
+
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+
+logging:
+  file:
+    name: logs/application.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    # 🔇 Silence repetitive tick logs from Market Data Producer
+    com.stockmonitor.stock_portfolio_monitoring_app.marketdata: WARN
+    # 🔇 Silence repetitive tick logs from Alert Engine
+    com.stockmonitor.stock_portfolio_monitoring_app.alert.service.AlertEngineService: WARN
