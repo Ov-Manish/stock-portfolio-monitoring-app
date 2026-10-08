@@ -1,6 +1,8 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.stock.controller;
 
+import com.stockmonitor.stock_portfolio_monitoring_app.constants.Tier;
 import com.stockmonitor.stock_portfolio_monitoring_app.marketdata.dto.MarketTickEvent;
+import com.stockmonitor.stock_portfolio_monitoring_app.rateLimit.RateLimited;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.dto.StockSearchResponse;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.entity.Stock;
 import com.stockmonitor.stock_portfolio_monitoring_app.stock.repository.StockRepository;
@@ -22,12 +24,14 @@ public class StockController {
     private  final StockService stockService;
     private final PriceHistoryService priceHistoryService;
 
+    @RateLimited
     @GetMapping
     public ResponseEntity<List<StockSearchResponse>> getAllActiveStocks() {
         List<StockSearchResponse> stocks = stockService.getAllActiveStocksWithPrices();
         return ResponseEntity.ok(stocks);
     }
 
+    @RateLimited
     @GetMapping("/search")
     public ResponseEntity<List<StockSearchResponse>> searchStocks(@RequestParam String symbol) {
         List<StockSearchResponse> results = stockService.searchStocks(symbol);
@@ -40,6 +44,7 @@ public class StockController {
         return new ResponseEntity<>(saved, HttpStatus.CREATED);
     }
 
+    @RateLimited
     @GetMapping("/{symbol}/history")
     public ResponseEntity<StockHistoryResponse> getStockHistory(
             @PathVariable String symbol,

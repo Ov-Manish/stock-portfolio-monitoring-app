@@ -1,9 +1,11 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.portfolio.controller;
 
+import com.stockmonitor.stock_portfolio_monitoring_app.constants.Tier;
 import com.stockmonitor.stock_portfolio_monitoring_app.portfolio.dto.*;
 import com.stockmonitor.stock_portfolio_monitoring_app.portfolio.repository.PortfolioRepository;
 import com.stockmonitor.stock_portfolio_monitoring_app.portfolio.service.ExcelPortfolioService;
 import com.stockmonitor.stock_portfolio_monitoring_app.portfolio.service.PortfolioService;
+import com.stockmonitor.stock_portfolio_monitoring_app.rateLimit.RateLimited;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -68,6 +70,7 @@ public class PortfolioController {
         return ResponseEntity.ok(sellStockResponse);
     }
 
+    @RateLimited(tier = Tier.HEAVY)
     @GetMapping("/summary/{userId}")
     public ResponseEntity<PortfolioSummaryResponse> getPortfolioSummary(
             @PathVariable UUID userId,
@@ -76,6 +79,7 @@ public class PortfolioController {
         return ResponseEntity.ok(summary);
     }
 
+    @RateLimited(tier = Tier.HEAVY)
     @PostMapping(value = "/upload-excel", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ExcelUploadResponse> uploadPortfolioExcel(
             @RequestParam("file") MultipartFile file,

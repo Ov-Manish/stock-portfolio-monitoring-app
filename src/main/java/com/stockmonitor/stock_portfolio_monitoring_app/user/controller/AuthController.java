@@ -1,5 +1,7 @@
 package com.stockmonitor.stock_portfolio_monitoring_app.user.controller;
 
+import com.stockmonitor.stock_portfolio_monitoring_app.constants.Tier;
+import com.stockmonitor.stock_portfolio_monitoring_app.rateLimit.RateLimited;
 import com.stockmonitor.stock_portfolio_monitoring_app.user.dto.AuthResponse;
 import com.stockmonitor.stock_portfolio_monitoring_app.user.dto.LoginRequest;
 import com.stockmonitor.stock_portfolio_monitoring_app.user.dto.RefreshTokenRequest;
@@ -20,18 +22,20 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @RateLimited(tier = Tier.AUTH)
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
-
+    @RateLimited(tier = Tier.AUTH)
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
     }
 
+    @RateLimited(tier = Tier.AUTH)
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest request) {
         AuthResponse response = authService.refreshToken(request);
@@ -50,6 +54,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", message));
     }
 
+    @RateLimited(tier = Tier.AUTH)
     @PostMapping("/resend-verification")
     public ResponseEntity<Map<String, String>> resendVerification(@RequestParam("email") String email) {
         String message = authService.resendVerification(email);
